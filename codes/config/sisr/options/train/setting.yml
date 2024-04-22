@@ -100,6 +100,9 @@ metrics:
   lpips:
     type: lpips
 
+FID:
+  type: FID
+
 #### logger
 logger:
   print_freq: 100

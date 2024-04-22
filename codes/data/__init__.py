@@ -26,7 +26,6 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
             sampler=sampler,
             drop_last=True,
             pin_memory=True,
-            prefetch_mode='cuda',
         )
     else:
         return torch.utils.data.DataLoader(

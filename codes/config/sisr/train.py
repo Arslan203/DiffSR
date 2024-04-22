@@ -327,7 +327,7 @@ def main():
                         metric_data = dict(data_generator = FID_dataloader)
                         metric_results_val['FID'] = calculate_metric(metric_data, self.opt['FID']).item()
 
-                    log_str = f'Validation {opt['datasets']['val']['name']}\n'
+                    log_str = f"Validation {opt['datasets']['val']['name']}\n"
                     for metric, value in metric_results_val.items():
                         log_str += f'\t # {metric}: {value:.4f}\n'
                     logger.info(log_str)

@@ -14,6 +14,7 @@ import torch.multiprocessing as mp
 from tqdm import tqdm
 from basicsr.metrics import calculate_metric
 from basicsr.data.prefetch_dataloader import CUDAPrefetcher
+from basicsr.utils import init_wandb_logger, init_tb_logger
 
 # from IPython import embed
 
@@ -42,6 +43,17 @@ def init_dist(backend="nccl", **kwargs):
     dist.init_process_group(
         backend=backend, **kwargs
     )  # Initializes the default distributed process group
+
+def init_tb_loggers(opt):
+    # initialize wandb logger before tensorboard logger to allow proper sync
+    if (opt['logger'].get('wandb') is not None) and (opt['logger']['wandb'].get('project')
+                                                     is not None) and ('debug' not in opt['name']):
+        assert opt['logger'].get('use_tb_logger') is True, ('should turn on tensorboard when using wandb')
+        init_wandb_logger(opt)
+    tb_logger = None
+    if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
+        tb_logger = init_tb_logger(log_dir=osp.join(opt['root_path'], 'tb_logger', opt['name']))
+    return tb_logger
 
 
 def main():
@@ -134,18 +146,7 @@ def main():
         logger = logging.getLogger("base")
         logger.info(option.dict2str(opt))
         # tensorboard logger
-        if opt["use_tb_logger"] and "debug" not in opt["name"]:
-            version = float(torch.__version__[0:3])
-            if version >= 1.1:  # PyTorch 1.1
-                from torch.utils.tensorboard import SummaryWriter
-            else:
-                logger.info(
-                    "You are using PyTorch {}. Tensorboard will use [tensorboardX]".format(
-                        version
-                    )
-                )
-                from tensorboardX import SummaryWriter
-            tb_logger = SummaryWriter(log_dir="log/{}/tb_logger/".format(opt["name"]))
+        tb_logger = init_tb_loggers(opt)
     else:
         util.setup_logger(
             "base", opt["path"]["log"], "train", level=logging.INFO, screen=False
@@ -227,11 +228,11 @@ def main():
 
     error = mp.Value('b', False)
 
-    prefetch_mode = opt['train'].get('prefetch_mode')
-    if opt['train']['prefetch_mode'] == 'cuda':
+    prefetch_mode = opt['datasets']['train'].get('prefetch_mode')
+    if prefetch_mode == 'cuda':
         prefetcher = CUDAPrefetcher(train_loader)
         logger.info(f'Use {prefetch_mode} prefetch dataloader')
-        if opt['train'].get('pin_memory') is not True:
+        if opt['datasets']['train'].get('pin_memory') is not True:
             raise ValueError('Please set pin_memory=True for CUDAPrefetcher.')
         
     # make iterable from val_dataloader

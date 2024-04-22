@@ -363,7 +363,7 @@ def main():
                 # # tensorboard logger
                 # if opt["use_tb_logger"] and "debug" not in opt["name"]:
                 #     tb_logger.add_scalar("psnr", avg_psnr, current_step)
-
+    
             if error.value:
                 sys.exit(0)
             #### save models and training states

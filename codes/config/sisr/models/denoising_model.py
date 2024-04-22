@@ -124,7 +124,7 @@ class DenoisingModel(BaseModel):
             self.with_metrics = self.opt.get('metrics') is not None
             if self.with_metrics:
                 self.metric_results = {f'm_{metric}': 0 for metric in self.opt['metrics'].keys()}
-                self.log_dict |= self.metric_results
+                # self.log_dict |= self.metric_results
 
     def feed_data(self, state, LQ, GT=None):
         self.state = state.to(self.device)    # noisy_state
@@ -148,8 +148,8 @@ class DenoisingModel(BaseModel):
         xt_1_expection = sde.reverse_sde_step_mean(self.state, score, timesteps)
         xt_1_optimum = sde.reverse_optimum_step(self.state, self.state_0, timesteps)
         loss = self.weight * self.loss_fn(xt_1_expection, xt_1_optimum)
-        with torch.no_grad():
-            self.output = sde.reverse_sde(self.state, False)
+        # with torch.no_grad():
+        #     self.output = sde.reverse_sde(self.state, False)
 
         loss.backward()
         self.optimizer.step()
@@ -157,15 +157,16 @@ class DenoisingModel(BaseModel):
 
         # set log
         loss_dict["loss"] = loss
-        loss_dict |= self.calculate_metrics_on_iter()
+        # loss_dict |= self.calculate_metrics_on_iter()
         self.reduce_loss_dict(loss_dict)
 
 
-    def calculate_metrics_on_iter(self):
+    def calculate_metrics_on_iter(self, sde=None):
         if self.with_metrics:
             # calculate metrics
             # output = self.output_ema if hasattr(self, 'net_g_ema') else self.output
-            output = self.output
+            with torch.no_grad():
+                output = sde.reverse_sde(self.state, False)
             for name, opt_ in self.opt['metrics'].items():
                 metric_data = dict(img1=output, img2=self.state_0)
                 self.metric_results[f'm_{name}'] = calculate_metric(metric_data, opt_)

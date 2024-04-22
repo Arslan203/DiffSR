@@ -271,7 +271,7 @@ def main():
                 )
 
                 if current_step % opt["logger"]["print_freq"] == 0:
-                    logs = model.get_current_log_reset(opt['logger']['print_freq'])
+                    logs = model.get_current_log_reset(sde, opt['logger']['print_freq'])
                     message = "<epoch:{:3d}, iter:{:8,d}, lr:{:.3e}> ".format(
                         epoch, current_step, model.get_current_learning_rate()
                     )

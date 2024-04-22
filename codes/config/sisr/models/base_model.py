@@ -158,11 +158,15 @@ class BaseModel:
 
             # return log_dict
     
-    def get_current_log_reset(self, step_size=1):
+    def get_current_log_reset(self, sde=None, step_size=1):
         res = self.log_dict
-        self.log_dict = OrderedDict({key: 0 for key in res.keys()})
+        tmp = OrderedDict({key: 0 for key in res.keys()})
         for key, val in res.items():
             res[key] = val / step_size
+        res |= self.calculate_metrics_on_iter(sde)
+        self.reduce_loss_dict(res)
+        res = self.log_dict
+        self.log_dict = tmp
         return res
 
     def validation(self, dataloader, current_iter, tb_logger, save_img=False):

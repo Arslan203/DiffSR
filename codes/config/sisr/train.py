@@ -12,6 +12,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from tqdm import tqdm
+import os.path as osp
 from basicsr.metrics import calculate_metric
 from basicsr.data.prefetch_dataloader import CUDAPrefetcher
 from basicsr.utils import init_wandb_logger, init_tb_logger
@@ -58,6 +59,7 @@ def init_tb_loggers(opt):
 
 def main():
     #### setup options of three networks
+    root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
     parser = argparse.ArgumentParser()
     parser.add_argument("-opt", type=str, default="D:/EDiffSR/codes/config/sisr/options/setting.yml")
     parser.add_argument(
@@ -69,6 +71,7 @@ def main():
 
     # convert to NoneDict, which returns None for missing keys
     opt = option.dict_to_nonedict(opt)
+    opt['root_path'] = root_path
 
     # choose small opt for SFTMD test, fill path of pre-trained model_F
     #### set random seed

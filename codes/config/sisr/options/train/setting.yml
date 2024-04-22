@@ -77,6 +77,9 @@ train:
   lr_gamma: 0.5
   eta_min: !!float 1e-7
 
+  prefetch_mode: cuda
+  pin_memory: true
+
   # criterion
   is_weighted: False
   loss_type: l1
@@ -101,3 +104,6 @@ logger:
   print_freq: 100
   show_logs: True
   save_checkpoint_freq: !!float 5e3
+  wandb:
+    project: EDiffSR
+    resume_id: ~

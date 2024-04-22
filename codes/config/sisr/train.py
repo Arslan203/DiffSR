@@ -13,6 +13,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from tqdm import tqdm
 from basicsr.metrics import calculate_metric
+from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
 # from IPython import embed
 
 import options as option
@@ -223,9 +224,14 @@ def main():
         "Start training from epoch: {:d}, iter: {:d}".format(start_epoch, current_step)
     )
 
-    best_psnr = 0.0
-    best_iter = 0
     error = mp.Value('b', False)
+
+    prefetch_mode = opt['train'].get('prefetch_mode')
+    if opt['train']['prefetch_mode'] == 'cuda':
+        prefetcher = CUDAPrefetcher(train_loader)
+        logger.info(f'Use {prefetch_mode} prefetch dataloader')
+        if opt['train'].get('pin_memory') is not True:
+            raise ValueError('Please set pin_memory=True for CUDAPrefetcher.')
 
     # -------------------------------------------------------------------------
     # -------------------------正式开始训练，前面都是废话---------------------------
@@ -233,7 +239,9 @@ def main():
     for epoch in range(start_epoch, total_epochs + 1):
         if opt["dist"]:
             train_sampler.set_epoch(epoch)
-        for _, train_data in enumerate(train_loader):
+        prefetcher.reset()
+        train_data = prefetcher.next()
+        while train_data is not None:
             current_step += 1
 
             if current_step > total_iters:
@@ -364,12 +372,155 @@ def main():
                     logger.info("Saving models and training states.")
                     model.save(current_step)
                     model.save_training_state(epoch, current_step)
+            
+            train_data = prefetcher.next()
 
     if rank <= 0:
         logger.info("Saving the final model.")
         model.save("latest")
         logger.info("End of Predictor and Corrector training.")
     tb_logger.close()
+
+    # for epoch in range(start_epoch, total_epochs + 1):
+    #     if opt["dist"]:
+    #         train_sampler.set_epoch(epoch)
+    #     for _, train_data in enumerate(train_loader):
+    #         current_step += 1
+
+    #         if current_step > total_iters:
+    #             break
+
+    #         LQ, GT = train_data["LQ"], train_data["GT"]  #  b 3 32 32; b 3 128 128
+
+    #         LQ = util.upscale(LQ, scale)  #  bicubic, which can be repleced by deep networks
+
+    #         # random timestep and state (noisy map) via SDE
+    #         timesteps, states = sde.generate_random_states(x0=GT, mu=LQ)  # t=batchsize，states [b 3 128 128]
+
+    #         model.feed_data(states, LQ, GT)  # xt, mu, x0, 将加了噪声的LR图xt，LR以及GT输入改进的UNet进行去噪
+
+    #         model.optimize_parameters(current_step, timesteps, sde)  # 优化UNet
+
+    #         model.update_learning_rate(
+    #             current_step, warmup_iter=opt["train"]["warmup_iter"]
+    #         )
+
+    #         if current_step % opt["logger"]["print_freq"] == 0:
+    #             logs = model.get_current_log_reset(opt['logger']['print_freq'])
+    #             message = "<epoch:{:3d}, iter:{:8,d}, lr:{:.3e}> ".format(
+    #                 epoch, current_step, model.get_current_learning_rate()
+    #             )
+    #             for k, v in logs.items():
+    #                 message += "{:s}: {:.4e} ".format(k, v)
+    #                 # tensorboard logger
+    #                 if opt["use_tb_logger"] and "debug" not in opt["name"]:
+    #                     if rank <= 0:
+    #                         tb_logger.add_scalar(k, v, current_step)
+    #             if rank <= 0:
+    #                 logger.info(message)
+
+    #         # validation, to produce ker_map_list(fake)
+    #         if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
+    #             avg_psnr = 0.0
+    #             idx = 0
+    #             save_img = opt['train'].get('save_img', False)
+    #             with_metrics = opt.get('metrics') is not None
+    #             eval_FID = opt.get('FID') is not None
+    #             if with_metrics:
+    #                 metric_results_val = {metric: 0 for metric in opt['metrics'].keys()}
+    #             pbar = tqdm(total=len(val_loader), unit='image')
+    #             if eval_FID:
+    #                 FID_dataloader = []
+    #             for _, val_data in enumerate(val_loader):
+
+    #                 LQ, GT = val_data["LQ"], val_data["GT"]
+    #                 LQ = util.upscale(LQ, scale)
+    #                 noisy_state = sde.noise_state(LQ)  # 在LR上加噪声，得到噪声LR图，噪声是随机生成的
+
+    #                 # valid Predictor
+    #                 model.feed_data(noisy_state, LQ, GT)
+    #                 model.test(sde)
+
+    #                 if with_metrics:
+    #                     # calculate metrics
+    #                     for name, opt_ in opt['metrics'].items():
+    #                         metric_data = dict(img1=model.output, img2=model.state_0)
+    #                         metric_results_val[name] += calculate_metric(metric_data, opt_).item()
+
+    #                 visuals = model.get_current_visuals()
+
+    #                 if eval_FID:
+    #                     FID_dataloader.append((visuals['Output'], visuals["GT"]))
+
+    #                 if save_img:
+    #                     output = util.tensor2img(visuals["Output"].squeeze())  # uint8
+    #                     gt_img = util.tensor2img(visuals["GT"].squeeze())  # uint8
+
+    #                     # save the validation results
+    #                     save_path = str(opt["path"]["experiments_root"]) + '/val_images/' + str(current_step)
+    #                     util.mkdirs(save_path)
+    #                     save_name = save_path + '/'+'{0:03d}'.format(idx) + '.png'
+    #                     util.save_img(output, save_name)
+
+    #                 # calculate PSNR
+    #                 # avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
+    #                 idx += 1
+
+    #                 pbar.update(1)
+    #                 pbar.set_description(f'Test {idx}.png')
+    #             pbar.close()
+
+    #             if with_metrics:
+    #                 for metric in metric_results_val.keys():
+    #                     metric_results_val[metric] /= (idx + 1)
+                    
+    #                 if opt.get('FID') is not None:
+    #                     metric_data = dict(data_generator = FID_dataloader)
+    #                     metric_results_val['FID'] = calculate_metric(metric_data, opt['FID']).item()
+
+    #                 log_str = f"Validation {opt['datasets']['val']['name']}\n"
+    #                 for metric, value in metric_results_val.items():
+    #                     log_str += f'\t # {metric}: {value:.4f}\n'
+    #                 logger.info(log_str)
+    #                 if tb_logger:
+    #                     for metric, value in metric_results_val.items():
+    #                         tb_logger.add_scalar(f'val/metrics/{metric}', value, current_step)
+
+    #             # avg_psnr = avg_psnr / idx
+
+    #             # if avg_psnr > best_psnr:
+    #             #     best_psnr = avg_psnr
+    #             #     best_iter = current_step
+
+    #             # # log
+    #             # logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}| Iter: {}".format(avg_psnr, best_psnr, best_iter))
+    #             # logger_val = logging.getLogger("val")  # validation logger
+    #             # logger_val.info(
+    #             #     "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
+    #             #         epoch, current_step, avg_psnr
+    #             #     )
+    #             # )
+    #             # print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
+    #             #         epoch, current_step, avg_psnr
+    #             #     ))
+    #             # # tensorboard logger
+    #             # if opt["use_tb_logger"] and "debug" not in opt["name"]:
+    #             #     tb_logger.add_scalar("psnr", avg_psnr, current_step)
+
+    #         if error.value:
+    #             sys.exit(0)
+    #         #### save models and training states
+    #         if current_step % opt["logger"]["save_checkpoint_freq"] == 0:
+    #             if rank <= 0:
+    #                 logger.info("Saving models and training states.")
+    #                 model.save(current_step)
+    #                 model.save_training_state(epoch, current_step)
+
+    # if rank <= 0:
+    #     logger.info("Saving the final model.")
+    #     model.save("latest")
+    #     logger.info("End of Predictor and Corrector training.")
+    # tb_logger.close()
 
 
 if __name__ == "__main__":

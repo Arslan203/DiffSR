@@ -67,3 +67,8 @@ def create_dataset(dataset_opt):
         )
     )
     return dataset
+
+def dataloader_iterable(loader):
+    while True:
+        for batch in loader:
+            yield batch

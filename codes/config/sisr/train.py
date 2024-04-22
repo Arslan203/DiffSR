@@ -13,7 +13,8 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from tqdm import tqdm
 from basicsr.metrics import calculate_metric
-from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
+from basicsr.data.prefetch_dataloader import CUDAPrefetcher
+
 # from IPython import embed
 
 import options as option
@@ -21,7 +22,7 @@ from models import create_model
 
 sys.path.insert(0, "../../")
 import utils as util
-from data import create_dataloader, create_dataset
+from data import create_dataloader, create_dataset, dataloader_iterable
 from data.data_sampler import DistIterSampler
 
 from data.util import bgr2ycbcr
@@ -232,6 +233,10 @@ def main():
         logger.info(f'Use {prefetch_mode} prefetch dataloader')
         if opt['train'].get('pin_memory') is not True:
             raise ValueError('Please set pin_memory=True for CUDAPrefetcher.')
+        
+    # make iterable from val_dataloader
+    val_loader_iter = dataloader_iterable(val_loader)
+    val_size = opt['train'].get('val_size', 2000)
 
     # -------------------------------------------------------------------------
     # -------------------------正式开始训练，前面都是废话---------------------------
@@ -278,18 +283,16 @@ def main():
 
             # validation, to produce ker_map_list(fake)
             if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
-                avg_psnr = 0.0
-                idx = 0
                 save_img = opt['train'].get('save_img', False)
                 with_metrics = opt.get('metrics') is not None
                 eval_FID = opt.get('FID') is not None
                 if with_metrics:
                     metric_results_val = {metric: 0 for metric in opt['metrics'].keys()}
-                pbar = tqdm(total=len(val_loader), unit='image')
+                pbar = tqdm(total=val_size, unit='image')
                 if eval_FID:
                     FID_dataloader = []
-                for _, val_data in enumerate(val_loader):
-
+                for idx in range(val_size):
+                    val_data = next(val_loader_iter)
                     LQ, GT = val_data["LQ"], val_data["GT"]
                     LQ = util.upscale(LQ, scale)
                     noisy_state = sde.noise_state(LQ)  # 在LR上加噪声，得到噪声LR图，噪声是随机生成的
@@ -321,7 +324,6 @@ def main():
 
                     # calculate PSNR
                     # avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
-                    idx += 1
 
                     pbar.update(1)
                     pbar.set_description(f'Test {idx}.png')
@@ -332,8 +334,10 @@ def main():
                         metric_results_val[metric] /= (idx + 1)
                     
                     if opt.get('FID') is not None:
+                        logger.info('evaluating FID...')
                         metric_data = dict(data_generator = FID_dataloader)
                         metric_results_val['FID'] = calculate_metric(metric_data, opt['FID']).item()
+                        logger.info('Done.')
 
                     log_str = f"Validation {opt['datasets']['val']['name']}\n"
                     for metric, value in metric_results_val.items():

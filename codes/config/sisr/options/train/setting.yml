@@ -38,6 +38,8 @@ datasets:
     use_flip: true
     use_rot: true
     color: RGB
+    prefetch_mode: cuda
+    pin_memory: true
   val:
     name: Val_Dataset
     mode: LQGT
@@ -77,8 +79,6 @@ train:
   lr_gamma: 0.5
   eta_min: !!float 1e-7
 
-  prefetch_mode: cuda
-  pin_memory: true
 
   # criterion
   is_weighted: False
@@ -87,6 +87,7 @@ train:
 
   manual_seed: 0
   val_freq: !!float 5e3
+  val_size: 100
   save_img: false
 
 metrics:

@@ -312,7 +312,7 @@ def main():
                         util.save_img(output, save_name)
 
                     # calculate PSNR
-                    avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
+                    # avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
                     idx += 1
 
                     pbar.update(1)
@@ -325,7 +325,7 @@ def main():
                     
                     if opt.get('FID') is not None:
                         metric_data = dict(data_generator = FID_dataloader)
-                        metric_results_val['FID'] = calculate_metric(metric_data, self.opt['FID']).item()
+                        metric_results_val['FID'] = calculate_metric(metric_data, opt['FID']).item()
 
                     log_str = f"Validation {opt['datasets']['val']['name']}\n"
                     for metric, value in metric_results_val.items():
@@ -335,26 +335,26 @@ def main():
                         for metric, value in metric_results_val.items():
                             tb_logger.add_scalar(f'val/metrics/{metric}', value, current_step)
 
-                avg_psnr = avg_psnr / idx
+                # avg_psnr = avg_psnr / idx
 
-                if avg_psnr > best_psnr:
-                    best_psnr = avg_psnr
-                    best_iter = current_step
+                # if avg_psnr > best_psnr:
+                #     best_psnr = avg_psnr
+                #     best_iter = current_step
 
-                # log
-                logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}| Iter: {}".format(avg_psnr, best_psnr, best_iter))
-                logger_val = logging.getLogger("val")  # validation logger
-                logger_val.info(
-                    "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
-                        epoch, current_step, avg_psnr
-                    )
-                )
-                print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
-                        epoch, current_step, avg_psnr
-                    ))
-                # tensorboard logger
-                if opt["use_tb_logger"] and "debug" not in opt["name"]:
-                    tb_logger.add_scalar("psnr", avg_psnr, current_step)
+                # # log
+                # logger.info("# Validation # PSNR: {:.6f}, Best PSNR: {:.6f}| Iter: {}".format(avg_psnr, best_psnr, best_iter))
+                # logger_val = logging.getLogger("val")  # validation logger
+                # logger_val.info(
+                #     "<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
+                #         epoch, current_step, avg_psnr
+                #     )
+                # )
+                # print("<epoch:{:3d}, iter:{:8,d}, psnr: {:.6f}".format(
+                #         epoch, current_step, avg_psnr
+                #     ))
+                # # tensorboard logger
+                # if opt["use_tb_logger"] and "debug" not in opt["name"]:
+                #     tb_logger.add_scalar("psnr", avg_psnr, current_step)
 
             if error.value:
                 sys.exit(0)

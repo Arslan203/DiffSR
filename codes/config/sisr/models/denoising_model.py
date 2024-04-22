@@ -124,7 +124,7 @@ class DenoisingModel(BaseModel):
             self.with_metrics = self.opt.get('metrics') is not None
             if self.with_metrics:
                 self.metric_results = {f'm_{metric}': 0 for metric in self.opt['metrics'].keys()}
-                # self.log_dict |= self.metric_results
+                self.log_dict |= self.metric_results
 
     def feed_data(self, state, LQ, GT=None):
         self.state = state.to(self.device)    # noisy_state

@@ -159,11 +159,20 @@ class BaseModel:
             # return log_dict
     
     def get_current_log_reset(self, sde=None, step_size=1):
+        # res = self.log_dict
+        # tmp = OrderedDict({key: 0 for key in res.keys()})
+        # for key, val in res.items():
+        #     res[key] = val / step_size
+        # res |= self.calculate_metrics_on_iter(sde)
+        # self.reduce_loss_dict(res)
+        # res = self.log_dict
+        # self.log_dict = tmp
+        # return res
         res = self.log_dict
         tmp = OrderedDict({key: 0 for key in res.keys()})
-        for key, val in res.items():
-            res[key] = val / step_size
-        res |= self.calculate_metrics_on_iter(sde)
+        for key, val in self.log_dict.items():
+            self.log_dict[key] = val / step_size
+        res = self.calculate_metrics_on_iter(sde)
         self.reduce_loss_dict(res)
         res = self.log_dict
         self.log_dict = tmp

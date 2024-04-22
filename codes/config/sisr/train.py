@@ -312,7 +312,7 @@ def main():
                         util.save_img(output, save_name)
 
                     # calculate PSNR
-                    avg_psnr += util.calculate_psnr(output, gt_img)
+                    avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
                     idx += 1
 
                     pbar.update(1)
@@ -327,8 +327,8 @@ def main():
                         metric_data = dict(data_generator = FID_dataloader)
                         metric_results_val['FID'] = calculate_metric(metric_data, self.opt['FID']).item()
 
-                    log_str = f'Validation {dataset_name}\n'
-                    for metric, value in self.metric_results_val.items():
+                    log_str = f'Validation {opt['datasets']['val']['name']}\n'
+                    for metric, value in metric_results_val.items():
                         log_str += f'\t # {metric}: {value:.4f}\n'
                     logger.info(log_str)
                     if tb_logger:

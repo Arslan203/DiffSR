@@ -1,6 +1,6 @@
 #### general settings
 name: ediffsr
-use_tb_logger: false
+use_tb_logger: true
 model: denoising
 distortion: sr
 gpu_ids: [0]
@@ -85,6 +85,16 @@ train:
   manual_seed: 0
   val_freq: !!float 5e3
   save_img: false
+
+metrics:
+  psnr:
+    type: psnr
+    #crop_border: 4
+    test_y_channel: true
+  ssim:
+    type: ssim
+  lpips:
+    type: lpips
 
 #### logger
 logger:

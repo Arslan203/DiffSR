@@ -117,7 +117,7 @@ class DenoisingModel(BaseModel):
                 raise NotImplementedError("MultiStepLR learning rate scheme is enough.")
 
             self.ema = EMA(self.model, beta=0.995, update_every=10).to(self.device)
-            self.log_dict = OrderedDict()
+            self.log_dict = OrderedDict({'loss': 0})
 
             self.opt = opt
 
@@ -156,7 +156,7 @@ class DenoisingModel(BaseModel):
         self.ema.update()
 
         # set log
-        loss_dict["loss"] = loss.item()
+        loss_dict["loss"] = loss
         loss_dict |= self.calculate_metrics_on_iter()
         self.reduce_loss_dict(loss_dict)
 

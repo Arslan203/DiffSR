@@ -10,6 +10,7 @@ from torch.nn.parallel import DataParallel, DistributedDataParallel
 import torchvision.utils as tvutils
 from tqdm import tqdm
 from ema_pytorch import EMA
+from basicsr.metrics import calculate_metric
 
 import models.lr_scheduler as lr_scheduler
 import models.networks as networks
@@ -118,6 +119,13 @@ class DenoisingModel(BaseModel):
             self.ema = EMA(self.model, beta=0.995, update_every=10).to(self.device)
             self.log_dict = OrderedDict()
 
+            self.opt = opt
+
+            self.with_metrics = self.opt.get('metrics') is not None
+            if self.with_metrics:
+                self.metric_results = {f'm_{metric}': 0 for metric in self.opt['metrics'].keys()}
+                self.log_dict |= self.metric_results
+
     def feed_data(self, state, LQ, GT=None):
         self.state = state.to(self.device)    # noisy_state
         self.condition = LQ.to(self.device)  # LQ
@@ -127,6 +135,7 @@ class DenoisingModel(BaseModel):
     def optimize_parameters(self, step, timesteps, sde=None):
         sde.set_mu(self.condition)
 
+        loss_dict = OrderedDict()
         self.optimizer.zero_grad()
 
         timesteps = timesteps.to(self.device)
@@ -139,13 +148,29 @@ class DenoisingModel(BaseModel):
         xt_1_expection = sde.reverse_sde_step_mean(self.state, score, timesteps)
         xt_1_optimum = sde.reverse_optimum_step(self.state, self.state_0, timesteps)
         loss = self.weight * self.loss_fn(xt_1_expection, xt_1_optimum)
+        with torch.no_grad():
+            self.output = sde.reverse_sde(self.state, False)
 
         loss.backward()
         self.optimizer.step()
         self.ema.update()
 
         # set log
-        self.log_dict["loss"] = loss.item()
+        loss_dict["loss"] = loss.item()
+        loss_dict |= self.calculate_metrics_on_iter()
+        self.reduce_loss_dict(loss_dict)
+
+
+    def calculate_metrics_on_iter(self):
+        if self.with_metrics:
+            # calculate metrics
+            # output = self.output_ema if hasattr(self, 'net_g_ema') else self.output
+            output = self.output
+            for name, opt_ in self.opt['metrics'].items():
+                metric_data = dict(img1=output, img2=self.state_0)
+                self.metric_results[f'm_{name}'] = calculate_metric(metric_data, opt_)
+            return self.metric_results
+        return dict()
 
     def test(self, sde=None, save_states=False):
         sde.set_mu(self.condition)
@@ -155,9 +180,6 @@ class DenoisingModel(BaseModel):
             self.output = sde.reverse_sde(self.state, save_states=save_states)
 
         self.model.train()
-
-    def get_current_log(self):
-        return self.log_dict
 
     def get_current_visuals(self, need_GT=True):
         out_dict = OrderedDict()

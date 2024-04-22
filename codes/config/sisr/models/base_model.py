@@ -13,6 +13,7 @@ class BaseModel:
         self.is_train = opt["is_train"]
         self.schedulers = []
         self.optimizers = []
+        self.log_dict = OrderedDict()
 
     def feed_data(self, data):
         pass
@@ -129,3 +130,51 @@ class BaseModel:
             self.optimizers[i].load_state_dict(o)
         for i, s in enumerate(resume_schedulers):
             self.schedulers[i].load_state_dict(s)
+    
+    def reduce_loss_dict(self, loss_dict):
+        """reduce loss dict.
+
+        In distributed training, it averages the losses among different GPUs .
+
+        Args:
+            loss_dict (OrderedDict): Loss dict.
+        """
+        with torch.no_grad():
+            if self.opt['dist']:
+                keys = []
+                losses = []
+                for name, value in loss_dict.items():
+                    keys.append(name)
+                    losses.append(value)
+                losses = torch.stack(losses, 0)
+                torch.distributed.reduce(losses, dst=0)
+                if self.opt['rank'] == 0:
+                    losses /= self.opt['world_size']
+                loss_dict = {key: loss for key, loss in zip(keys, losses)}
+
+            # log_dict = OrderedDict()
+            for name, value in loss_dict.items():
+                self.log_dict[name] += value.mean().item()
+
+            # return log_dict
+    
+    def get_current_log_reset(self, step_size=1):
+        res = self.log_dict
+        self.log_dict = OrderedDict({key: 0 for key in res.keys()})
+        for key, val in res.items():
+            res[key] = val / step_size
+        return res
+
+    def validation(self, dataloader, current_iter, tb_logger, save_img=False):
+        """Validation function.
+
+        Args:
+            dataloader (torch.utils.data.DataLoader): Validation dataloader.
+            current_iter (int): Current iteration.
+            tb_logger (tensorboard logger): Tensorboard logger.
+            save_img (bool): Whether to save images. Default: False.
+        """
+        if self.opt['dist']:
+            self.dist_validation(dataloader, current_iter, tb_logger, save_img)
+        else:
+            self.nondist_validation(dataloader, current_iter, tb_logger, save_img)

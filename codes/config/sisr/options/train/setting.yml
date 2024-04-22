@@ -17,7 +17,7 @@ degradation: # for some synthetic dataset that only have GTs
   noise_type: G # Gaussian noise: G
 
   # for super-resolution
-  scale: 4
+  scale: 2
   
 #### datasets
 datasets:
@@ -25,15 +25,15 @@ datasets:
     optimizer: AdamW # Adam, AdamW, Lion
     name: Train_Dataset
     mode: LQGT
-    dataroot_GT: /home/amax/Desktop/16T/disk3/XY-SPACE/SISR/Dataset/train/GT
-    dataroot_LQ: /home/amax/Desktop/16T/disk3/XY-SPACE/SISR/Dataset/train/LR
+    dataroot_GT: /content/train
+    dataroot_LQ: /content/train_LR
 #    dataroot_GT: D:/SISR/Dataset/train/GT
 #    dataroot_LQ: D:/SISR/Dataset/train/LR
 
     use_shuffle: true
-    n_workers: 4  # per GPU
-    batch_size: 2
-    GT_size: 256
+    n_workers: 2  # per GPU
+    batch_size: 16
+    GT_size: 128
     LR_size: 64
     use_flip: true
     use_rot: true
@@ -41,8 +41,8 @@ datasets:
   val:
     name: Val_Dataset
     mode: LQGT
-    dataroot_GT: /home/amax/Desktop/16T/disk3/XY-SPACE/SISR/baseline/AID-tiny/GT
-    dataroot_LQ: /home/amax/Desktop/16T/disk3/XY-SPACE/SISR/baseline/AID-tiny/LR
+    dataroot_GT: /content/test
+    dataroot_LQ: /content/test_LR
 #    dataroot_GT: D:/SISR/Dataset/train/GT
 #    dataroot_LQ: D:/SISR/Dataset/train/LR
 
@@ -84,8 +84,10 @@ train:
 
   manual_seed: 0
   val_freq: !!float 5e3
+  save_img: false
 
 #### logger
 logger:
   print_freq: 100
+  show_logs: True
   save_checkpoint_freq: !!float 5e3

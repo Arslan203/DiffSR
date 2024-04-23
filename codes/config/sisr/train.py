@@ -298,7 +298,6 @@ def main():
                         metric_results_val = {metric: 0 for metric in opt['metrics'].keys()}
                     pbar = tqdm(total=val_size, unit='image')
                     for idx in range(val_size):
-                        val_iter += 1
                         val_data = next(val_loader_iter)
                         img_name = osp.splitext(osp.basename(val_data['LQ_path'][0]))[0]
                         LQ, GT = val_data["LQ"], val_data["GT"]

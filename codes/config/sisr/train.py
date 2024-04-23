@@ -241,7 +241,7 @@ def main():
         
     # make iterable from val_dataloader
     val_loader_iter = dataloader_iterable(val_loader)
-    val_iter = 0
+    eval_FID = opt.get('FID') is not None
     if eval_FID:
         FID_dataloader = []
     val_size = opt['train'].get('val_size', 2000)
@@ -294,7 +294,6 @@ def main():
                 if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
                     save_img = opt['train'].get('save_img', False)
                     with_metrics = opt.get('metrics') is not None
-                    eval_FID = opt.get('FID') is not None
                     if with_metrics:
                         metric_results_val = {metric: 0 for metric in opt['metrics'].keys()}
                     pbar = tqdm(total=val_size, unit='image')

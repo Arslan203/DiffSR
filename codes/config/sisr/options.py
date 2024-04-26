@@ -69,9 +69,12 @@ def parse(opt_path, is_train=True):
     # config_dir = path.split("/")[-2]
     config_dir = 'sisr'
     if is_train:
-        experiments_root = osp.join(
-            opt["path"]["root"], "experiments", config_dir, opt["name"]
-        )
+        # experiments_root = osp.join(
+        #     opt["path"]["root"], "experiments", config_dir, opt["name"]
+        # )
+        experiments_root = '/content/drive/MyDrive/scientific_work/experiments_Diff' \
+        if opt['path']['experiments_root'] is None else opt['path']['experiments_root']
+        experiments_root = osp.join(experiments_root, opt['name'])
         opt["path"]["experiments_root"] = experiments_root
         opt["path"]["models"] = osp.join(experiments_root, "models")
         opt["path"]["training_state"] = osp.join(experiments_root, "training_state")

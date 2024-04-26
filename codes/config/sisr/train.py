@@ -419,7 +419,7 @@ def main():
                 )
 
                 if current_step % opt["logger"]["print_freq"] == 0:
-                    logs = model.get_current_log_reset(opt['logger']['print_freq'])
+                    logs = model.get_current_log_reset(sde, opt['logger']['print_freq'])
                     message = "<epoch:{:3d}, iter:{:8,d}, lr:{:.3e}> ".format(
                         epoch, current_step, model.get_current_learning_rate()
                     )
@@ -434,18 +434,14 @@ def main():
 
                 # validation, to produce ker_map_list(fake)
                 if current_step % opt["train"]["val_freq"] == 0 and rank <= 0:
-                    avg_psnr = 0.0
-                    idx = 0
                     save_img = opt['train'].get('save_img', False)
                     with_metrics = opt.get('metrics') is not None
-                    eval_FID = opt.get('FID') is not None
                     if with_metrics:
                         metric_results_val = {metric: 0 for metric in opt['metrics'].keys()}
-                    pbar = tqdm(total=len(val_loader), unit='image')
-                    if eval_FID:
-                        FID_dataloader = []
-                    for _, val_data in enumerate(val_loader):
-
+                    pbar = tqdm(total=val_size, unit='image')
+                    for idx in range(val_size):
+                        val_data = next(val_loader_iter)
+                        img_name = osp.splitext(osp.basename(val_data['LQ_path'][0]))[0]
                         LQ, GT = val_data["LQ"], val_data["GT"]
                         LQ = util.upscale(LQ, scale)
                         noisy_state = sde.noise_state(LQ)  # 在LR上加噪声，得到噪声LR图，噪声是随机生成的
@@ -460,36 +456,39 @@ def main():
                                 metric_data = dict(img1=model.output, img2=model.state_0)
                                 metric_results_val[name] += calculate_metric(metric_data, opt_).item()
 
+                        
                         visuals = model.get_current_visuals()
-
                         if eval_FID:
-                            FID_dataloader.append((visuals['Output'], visuals["GT"]))
+                            FID_dataloader.append((torch.unsqueeze(visuals['Output'], 0), torch.unsqueeze(visuals['GT'], 0)))
 
                         if save_img:
+                            visuals = model.get_current_visuals()
                             output = util.tensor2img(visuals["Output"].squeeze())  # uint8
                             gt_img = util.tensor2img(visuals["GT"].squeeze())  # uint8
 
                             # save the validation results
                             save_path = str(opt["path"]["experiments_root"]) + '/val_images/' + str(current_step)
                             util.mkdirs(save_path)
-                            save_name = save_path + '/'+'{0:03d}'.format(idx) + '.png'
+                            save_name = save_path + '/'+ img_name + '.png'
                             util.save_img(output, save_name)
 
                         # calculate PSNR
                         # avg_psnr += util.calculate_psnr(util.tensor2img(visuals["Output"].squeeze()), util.tensor2img(visuals["GT"].squeeze()))
-                        idx += 1
 
                         pbar.update(1)
-                        pbar.set_description(f'Test {idx}.png')
+                        pbar.set_description(f'Test {img_name}.png')
                     pbar.close()
 
                     if with_metrics:
                         for metric in metric_results_val.keys():
                             metric_results_val[metric] /= (idx + 1)
                         
-                        if opt.get('FID') is not None:
+                        if opt.get('FID') is not None and len(FID_dataloader) > 2048:
+                            logger.info('evaluating FID...')
                             metric_data = dict(data_generator = FID_dataloader)
                             metric_results_val['FID'] = calculate_metric(metric_data, opt['FID']).item()
+                            FID_dataloader = []
+                            logger.info('Done.')
 
                         log_str = f"Validation {opt['datasets']['val']['name']}\n"
                         for metric, value in metric_results_val.items():
@@ -519,7 +518,7 @@ def main():
                     # # tensorboard logger
                     # if opt["use_tb_logger"] and "debug" not in opt["name"]:
                     #     tb_logger.add_scalar("psnr", avg_psnr, current_step)
-
+        
                 if error.value:
                     sys.exit(0)
                 #### save models and training states
@@ -528,7 +527,7 @@ def main():
                         logger.info("Saving models and training states.")
                         model.save(current_step)
                         model.save_training_state(epoch, current_step)
-
+            
         if rank <= 0:
             logger.info("Saving the final model.")
             model.save("latest")

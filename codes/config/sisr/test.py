@@ -7,6 +7,9 @@ import sys
 import time
 from collections import OrderedDict
 import torchvision.utils as tvutils
+from basicsr.metrics import calculate_metric
+from tqdm import tqdm
+import pickle
 
 import numpy as np
 import torch
@@ -90,6 +93,10 @@ for test_loader in test_loaders:
     test_results["ssim_y"] = []
     test_results["lpips"] = []
     test_times = []
+    with_metrics = opt.get('metrics') is not None
+    if with_metrics:
+        metric_results_val = {name: dict() for name in opt['metrics'].keys()}
+    pbar = tqdm(total=len(test_loader), unit='image')
 
     for i, test_data in enumerate(test_loader):
         single_img_psnr = []
@@ -111,6 +118,13 @@ for test_loader in test_loaders:
         toc = time.time()
         test_times.append(toc - tic)
 
+        if with_metrics:
+            # calculate metrics
+            for name, opt_ in opt['metrics'].items():
+                metric_data = dict(img1=model.output, img2=model.state_0)
+                metric_results_val[name][f'{img_name}.png'] += calculate_metric(metric_data, opt_).item()
+
+
         visuals = model.get_current_visuals()
         SR_img = visuals["Output"]
         output = util.tensor2img(SR_img.squeeze())  # uint8
@@ -123,7 +137,13 @@ for test_loader in test_loaders:
         else:
             save_img_path = os.path.join(dataset_dir, img_name + ".png")
         util.save_img(output, save_img_path)
+        pbar.update(1)
+        pbar.set_description(f'Test {img_name}.png')
+    pbar.close()
 
         # remove it if you only want to save output images
         
     print(f"average test time: {np.mean(test_times):.4f}")
+
+with open('metrics.pkl', 'wb') as f:
+    pickle.dump(metric_results_val, f)
